@@ -41,14 +41,21 @@ class Chef
 
         def modify_group_members
           unless @new_resource.members.empty?
-            if(@new_resource.append)
-              @new_resource.members.each do |member|
-                Chef::Log.debug("#{@new_resource} appending member #{member} to group #{@new_resource.group_name}")
-                shell_out!("groupmod -A #{member} #{@new_resource.group_name}")
+            #add users that are missing in any case
+            to_add = @new_resource.members.dup
+            to_add.reject! { |user| @current_resource.members.include?(user) }
+            Chef::Log.debug("#{@new_resource} adding members #{to_add.join(', ')} to group #{@new_resource.group_name}") unless to_add.empty?
+            to_add.each do |member|
+              shell_out!("groupmod -A #{member} #{@new_resource.group_name}")
+            end
+            #delete users if not in "append" mode
+            unless(@new_resource.append)
+              to_delete = @current_resource.members.dup
+              to_delete.reject! { |user| @new_resource.members.include?(user) }
+              Chef::Log.debug("#{@new_resource} removing members #{to_delete.join(', ')}") unless to_delete.empty?
+              to_delete.each do |member|
+                shell_out!("groupmod -R #{member} #{@new_resource.group_name}")
               end
-            else
-              Chef::Log.debug("#{@new_resource} setting group members to #{@new_resource.members.join(', ')}")
-              shell_out!("groupmod -A #{@new_resource.members.join(',')} #{@new_resource.group_name}")
             end
           else
             Chef::Log.debug("#{@new_resource} not changing group members, the group has no members")
